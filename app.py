@@ -1,0 +1,223 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from sklearn.neural_network import MLPClassifier
+from sklearn.preprocessing import StandardScaler
+from data_loader import load_movies, load_ratings, get_genre_list
+
+# Setup Streamlit page
+st.set_page_config(page_title="Movie Recommendation AI", page_icon="🎬", layout="wide")
+
+@st.cache_data
+def load_data():
+    """Load and cache the datasets."""
+    # Strict requirement: using a dataset subset of 100 to 500 movies.
+    movies = load_movies("movies_metadata.csv", min_movies=100, max_movies=500)
+    ratings = load_ratings("ratings_small.csv")
+    return movies, ratings
+
+@st.cache_resource
+def train_nn_model(movies, ratings):
+    """
+    Train a simple Multi-Layer Perceptron (Neural Network) 
+    to predict if a user will like a movie based on its features.
+    """
+    # Merge ratings with movie features to build the training set
+    merged = pd.merge(ratings, movies, left_on="movieId", right_on="id", how="inner")
+    
+    # Synthetic target: Like (1) if rating >= 3.5, else Dislike (0)
+    merged['liked'] = (merged['rating'] >= 3.5).astype(int)
+    
+    # Features for the model
+    features = ['runtime', 'vote_average', 'year', 'popularity']
+    X = merged[features].fillna(0)
+    y = merged['liked']
+    
+    # Scale features for the neural network
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
+    
+    # Small NN structure suitable for educational prototype
+    clf = MLPClassifier(hidden_layer_sizes=(16, 8), max_iter=500, random_state=42)
+    
+    if len(X_scaled) > 0:
+        clf.fit(X_scaled, y)
+    else:
+        clf = None
+        
+    return clf, scaler
+
+@st.cache_data
+def get_content_similarity_matrix(movies):
+    """
+    Calculate the cosine similarity between movies based on 
+    their genres and overview text (TF-IDF vectorization).
+    """
+    # Combine textual features
+    movies['content'] = movies['genres'].fillna('') + " " + movies['overview'].fillna('')
+    
+    # Vectorize using TF-IDF
+    tfidf = TfidfVectorizer(stop_words='english')
+    tfidf_matrix = tfidf.fit_transform(movies['content'])
+    
+    # Compute similarity matrix
+    cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
+    return cosine_sim
+
+def predict_preference(movie_row, model, scaler):
+    """Predict the 'Preference Score' using the trained Neural Network."""
+    if model is None:
+        return 0.0
+    features = ['runtime', 'vote_average', 'year', 'popularity']
+    x = movie_row[features].fillna(0).values.reshape(1, -1)
+    x_scaled = scaler.transform(x)
+    # Get probability of class 1 (liked)
+    probs = model.predict_proba(x_scaled)
+    return probs[0][1]
+
+# ----------------- UI Starts Here -----------------
+
+st.title("🎬 AI Movie Recommendation & Viewing Planner")
+st.markdown("Prototype using Scikit-Learn (TF-IDF, Cosine Similarity, & MLPClassifier) and Streamlit.")
+
+# 1. Load Data & Models
+with st.spinner("Loading data and training AI models..."):
+    movies_df, ratings_df = load_data()
+    genre_list = get_genre_list(movies_df)
+    nn_model, scaler = train_nn_model(movies_df, ratings_df)
+    cosine_sim = get_content_similarity_matrix(movies_df)
+
+# 2. Sidebar - User Inputs
+st.sidebar.header("⚙️ Your Preferences")
+
+liked_movies_titles = st.sidebar.multiselect(
+    "Select 1-3 movies you liked:", 
+    options=movies_df['title'].unique(),
+    max_selections=3
+)
+
+preferred_genres = st.sidebar.multiselect(
+    "Preferred Genres:", 
+    options=genre_list
+)
+
+st.sidebar.markdown("---")
+st.sidebar.header("🔧 Constraints")
+max_runtime = st.sidebar.slider("Max Runtime (minutes):", min_value=60, max_value=240, value=150)
+family_friendly = st.sidebar.checkbox("Family Friendly (Exclude Adult Movies)", value=False)
+
+# 3. Main Logic - Generating Recommendations
+if st.button("Generate Recommendations", type="primary"):
+    
+    # Ensure some input is given
+    if not liked_movies_titles and not preferred_genres:
+        st.warning("Please select at least one liked movie or a preferred genre from the sidebar to get started.")
+    else:
+        st.markdown("---")
+        
+        # Layout columns for the two methods
+        col1, col2 = st.columns(2)
+        
+        # -------------------------------------------------------------
+        # METHOD A: Content-Based Filtering
+        # -------------------------------------------------------------
+        with col1:
+            st.header("🔍 Method A: Content-Based")
+            st.caption("Finds movies similar to the ones you already like using TF-IDF text analysis.")
+            
+            if not liked_movies_titles:
+                st.info("Select movies you like in the sidebar to see content-based recommendations.")
+            else:
+                # Find indices of the selected liked movies
+                liked_indices = movies_df[movies_df['title'].isin(liked_movies_titles)].index.tolist()
+                
+                # Average the similarity scores of the liked movies
+                sim_scores = np.zeros(len(movies_df))
+                for idx in liked_indices:
+                    sim_scores += cosine_sim[idx]
+                sim_scores = sim_scores / len(liked_indices)
+                
+                # Sort movies by similarity score
+                movie_indices = np.argsort(sim_scores)[::-1]
+                
+                # Filter out the movies the user already selected
+                rec_indices = [i for i in movie_indices if i not in liked_indices]
+                
+                count_a = 0
+                for i in rec_indices:
+                    row = movies_df.iloc[i]
+                    
+                    # Apply hard constraints
+                    if row['runtime'] > max_runtime: continue
+                    if family_friendly and row['adult'] == True: continue
+                    if preferred_genres:
+                        movie_genres = [g.strip() for g in row['genres'].split(',')]
+                        if not any(g in movie_genres for g in preferred_genres):
+                            continue
+                    
+                    # Display recommendation
+                    similarity = sim_scores[i] * 100
+                    pref_score = predict_preference(row, nn_model, scaler) * 100
+                    
+                    with st.container(border=True):
+                        st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
+                        st.markdown(f"**Explanation:** Recommended because it has a **{similarity:.1f}% similarity** to your liked movies based on its overview and genres.")
+                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
+                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
+                    
+                    count_a += 1
+                    if count_a >= 3: # Show top 3
+                        break
+                
+                if count_a == 0:
+                    st.info("No content-based recommendations found matching your constraints.")
+
+        # -------------------------------------------------------------
+        # METHOD B: Heuristic/Rating-Based
+        # -------------------------------------------------------------
+        with col2:
+            st.header("⭐ Method B: Top Rated & Popular")
+            st.caption("Recommends highly-rated blockbusters tailored to your constraints.")
+            
+            # Start with all movies
+            filtered_df = movies_df.copy()
+            
+            # Apply constraints
+            filtered_df = filtered_df[filtered_df['runtime'] <= max_runtime]
+            if family_friendly:
+                filtered_df = filtered_df[filtered_df['adult'] == False]
+                
+            if preferred_genres:
+                # Keep movies that have AT LEAST ONE of the preferred genres
+                pattern = '|'.join(preferred_genres)
+                filtered_df = filtered_df[filtered_df['genres'].str.contains(pattern, case=False, na=False)]
+                
+            # Exclude already liked movies
+            if liked_movies_titles:
+                filtered_df = filtered_df[~filtered_df['title'].isin(liked_movies_titles)]
+                
+            if len(filtered_df) > 0:
+                # Create a heuristic score combining vote average (70%) and popularity (30%)
+                filtered_df['norm_vote'] = filtered_df['vote_average'] / filtered_df['vote_average'].max()
+                filtered_df['norm_pop'] = filtered_df['popularity'] / filtered_df['popularity'].max()
+                filtered_df['heuristic_score'] = (filtered_df['norm_vote'] * 0.7) + (filtered_df['norm_pop'] * 0.3)
+                
+                # Get top 3
+                top_heuristic = filtered_df.sort_values(by='heuristic_score', ascending=False).head(3)
+                
+                for _, row in top_heuristic.iterrows():
+                    pref_score = predict_preference(row, nn_model, scaler) * 100
+                    
+                    reason = "Highly rated and extremely popular overall."
+                    if preferred_genres:
+                        reason = f"One of the best-rated and most popular movies in your preferred genres."
+                        
+                    with st.container(border=True):
+                        st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
+                        st.markdown(f"**Explanation:** {reason} (Score: **{row['heuristic_score']*100:.1f}**)")
+                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
+                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
+            else:
+                st.info("No heuristic recommendations found matching your constraints.")
