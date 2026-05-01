@@ -104,7 +104,7 @@ preferred_genres = st.sidebar.multiselect(
 )
 
 st.sidebar.markdown("---")
-st.sidebar.header("🔧 Constraints")
+st.sidebar.header(" Constraints")
 max_runtime = st.sidebar.slider("Max Runtime (minutes):", min_value=60, max_value=240, value=150)
 family_friendly = st.sidebar.checkbox("Family Friendly (Exclude Adult Movies)", value=False)
 
@@ -124,7 +124,7 @@ if st.button("Generate Recommendations", type="primary"):
         # METHOD A: Content-Based Filtering
         # -------------------------------------------------------------
         with col1:
-            st.header("🔍 Method A: Content-Based")
+            st.header(" Method A: Content-Based")
             st.caption("Finds movies similar to the ones you already like using TF-IDF text analysis.")
             
             if not liked_movies_titles:
@@ -164,8 +164,8 @@ if st.button("Generate Recommendations", type="primary"):
                     with st.container(border=True):
                         st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
                         st.markdown(f"**Explanation:** Recommended because it has a **{similarity:.1f}% similarity** to your liked movies based on its overview and genres.")
-                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
-                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
+                        st.markdown(f"** Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
+                        st.caption(f" Genres: {row['genres']} | ⏱ Runtime: {row['runtime']} min |  Avg Rating: {row['vote_average']}")
                     
                     count_a += 1
                     if count_a >= 3: # Show top 3
@@ -178,7 +178,7 @@ if st.button("Generate Recommendations", type="primary"):
         # METHOD B: Heuristic/Rating-Based
         # -------------------------------------------------------------
         with col2:
-            st.header("⭐ Method B: Top Rated & Popular")
+            st.header(" Method B: Top Rated & Popular")
             st.caption("Recommends highly-rated blockbusters tailored to your constraints.")
             
             # Start with all movies
@@ -217,7 +217,141 @@ if st.button("Generate Recommendations", type="primary"):
                     with st.container(border=True):
                         st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
                         st.markdown(f"**Explanation:** {reason} (Score: **{row['heuristic_score']*100:.1f}**)")
-                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
-                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
+                        st.markdown(f"** Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
+                        st.caption(f"Genres: {row['genres']} | Runtime: {row['runtime']} min | Avg Rating: {row['vote_average']}")
             else:
                 st.info("No heuristic recommendations found matching your constraints.")
+
+        # -------------------------------------------------------------
+        # SECTION C: Watch Plan Builder
+        # -------------------------------------------------------------
+        st.markdown("---")
+        st.header(" Your Personalized Watch Plan")
+        st.caption(
+            "A short viewing schedule built from the top recommendations above. "
+            "Movies are ordered by Neural Net preference score and spread across your chosen days."
+        )
+
+        # ── Gather all recommended movies (deduplicated) ──────────────
+        watch_candidates = []
+
+        # Re-run content-based top picks (same logic, silent)
+        if liked_movies_titles:
+            liked_indices = movies_df[movies_df['title'].isin(liked_movies_titles)].index.tolist()
+            sim_scores_wp = np.zeros(len(movies_df))
+            for idx in liked_indices:
+                sim_scores_wp += cosine_sim[idx]
+            sim_scores_wp /= len(liked_indices)
+            movie_indices_wp = np.argsort(sim_scores_wp)[::-1]
+            rec_indices_wp = [i for i in movie_indices_wp if i not in liked_indices]
+
+            for i in rec_indices_wp:
+                row = movies_df.iloc[i]
+                if row['runtime'] > max_runtime:
+                    continue
+                if family_friendly and row['adult'] == True:
+                    continue
+                if preferred_genres:
+                    movie_genres = [g.strip() for g in row['genres'].split(',')]
+                    if not any(g in movie_genres for g in preferred_genres):
+                        continue
+                pref = predict_preference(row, nn_model, scaler)
+                watch_candidates.append({
+                    'title': row['title'],
+                    'year': row['year'],
+                    'genres': row['genres'],
+                    'runtime': row['runtime'],
+                    'vote_average': row['vote_average'],
+                    'pref_score': pref,
+                    'source': 'Content-Based'
+                })
+                if len(watch_candidates) >= 3:
+                    break
+
+        # Re-run heuristic top picks
+        filtered_wp = movies_df.copy()
+        filtered_wp = filtered_wp[filtered_wp['runtime'] <= max_runtime]
+        if family_friendly:
+            filtered_wp = filtered_wp[filtered_wp['adult'] == False]
+        if preferred_genres:
+            pattern = '|'.join(preferred_genres)
+            filtered_wp = filtered_wp[filtered_wp['genres'].str.contains(pattern, case=False, na=False)]
+        if liked_movies_titles:
+            filtered_wp = filtered_wp[~filtered_wp['title'].isin(liked_movies_titles)]
+        if len(filtered_wp) > 0:
+            filtered_wp['norm_vote'] = filtered_wp['vote_average'] / filtered_wp['vote_average'].max()
+            filtered_wp['norm_pop']  = filtered_wp['popularity']  / filtered_wp['popularity'].max()
+            filtered_wp['heuristic_score'] = (filtered_wp['norm_vote'] * 0.7) + (filtered_wp['norm_pop'] * 0.3)
+            top_h = filtered_wp.sort_values('heuristic_score', ascending=False).head(3)
+            for _, row in top_h.iterrows():
+                if any(c['title'] == row['title'] for c in watch_candidates):
+                    continue  # skip duplicates
+                pref = predict_preference(row, nn_model, scaler)
+                watch_candidates.append({
+                    'title': row['title'],
+                    'year': row['year'],
+                    'genres': row['genres'],
+                    'runtime': row['runtime'],
+                    'vote_average': row['vote_average'],
+                    'pref_score': pref,
+                    'source': 'Top Rated'
+                })
+
+        if not watch_candidates:
+            st.info("No movies available to build a watch plan. Adjust your constraints and try again.")
+        else:
+            # ── User chooses plan duration ────────────────────────────
+            num_days = st.slider(
+                " Spread your watch plan over how many days?",
+                min_value=1, max_value=7,
+                value=min(3, len(watch_candidates))
+            )
+
+            # Sort all candidates by Neural Net preference score (descending)
+            watch_candidates.sort(key=lambda x: x['pref_score'], reverse=True)
+
+            # Pick top N movies (one per day; cap at num_days)
+            plan_movies = watch_candidates[:num_days]
+
+            # Assign one movie per day
+            day_labels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+
+            st.markdown("###  Watch Schedule")
+            total_runtime = 0
+
+            for day_idx, movie in enumerate(plan_movies):
+                day_name = day_labels[day_idx % 7]
+                pref_pct  = movie['pref_score'] * 100
+                runtime   = int(movie['runtime']) if pd.notnull(movie['runtime']) else 0
+                total_runtime += runtime
+                year_str  = str(int(movie['year'])) if pd.notnull(movie['year']) else "N/A"
+
+                with st.container(border=True):
+                    dcol1, dcol2 = st.columns([1, 4])
+
+                    with dcol1:
+                        st.markdown(f"### Day {day_idx + 1}")
+                        st.markdown(f"**{day_name}**")
+
+                    with dcol2:
+                        st.markdown(f"####  {movie['title']} ({year_str})")
+                        st.caption(f" {movie['genres']}  |  {runtime} min  |   {movie['vote_average']}")
+
+                        # Progress bar for preference score
+                        st.markdown(f"** Predicted Enjoyment:** {pref_pct:.1f}%")
+                        st.progress(movie['pref_score'])
+
+                        # Explain why it's in the plan
+                        if movie['source'] == 'Content-Based':
+                            reason = "Selected because it closely matches the style and themes of your liked movies."
+                        else:
+                            reason = "Selected because it is among the highest-rated and most popular films in your preferences."
+                        st.markdown(f"* Why this movie?* {reason}")
+
+            # ── Plan Summary ──────────────────────────────────────────
+            st.markdown("---")
+            sum_col1, sum_col2, sum_col3 = st.columns(3)
+            sum_col1.metric("🎬 Movies in Plan", len(plan_movies))
+            sum_col2.metric("⏱️ Total Watch Time", f"{total_runtime} min  (~{total_runtime // 60}h {total_runtime % 60}m)")
+            avg_enjoy = np.mean([m['pref_score'] for m in plan_movies]) * 100
+            sum_col3.metric("🧠 Avg Predicted Enjoyment", f"{avg_enjoy:.1f}%")
