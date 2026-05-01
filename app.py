@@ -89,24 +89,148 @@ with st.spinner("Loading data and training AI models..."):
     nn_model, scaler = train_nn_model(movies_df, ratings_df)
     cosine_sim = get_content_similarity_matrix(movies_df)
 
+# =============================================================
+# BONUS FEATURES — Stretch Ideas (Cold-Start, Genre Diversity,
+# Mood-Based Recommendations)
+# These three features go beyond the minimum project scope and
+# are implemented as optional enhancements visible in the sidebar.
+# =============================================================
+
+# Mood-to-Genre mapping table used by the Mood-Based feature (BONUS)
+MOOD_GENRE_MAP = {
+    "😄 Happy":       ["Comedy", "Animation", "Family", "Music"],
+    "🔥 Adventurous": ["Action", "Adventure", "Science Fiction", "Fantasy"],
+    "💘 Romantic":    ["Romance", "Drama"],
+    "😱 Scared":      ["Horror", "Thriller", "Mystery"],
+    "🤔 Thoughtful":  ["Drama", "Documentary", "History"],
+    "😌 Relaxed":     ["Comedy", "Animation", "Family", "Romance"],
+}
+
 # 2. Sidebar - User Inputs
 st.sidebar.header("⚙️ Your Preferences")
 
-liked_movies_titles = st.sidebar.multiselect(
-    "Select 1-3 movies you liked:", 
-    options=movies_df['title'].unique(),
-    max_selections=3
-)
+# ------------------------------------------------------------------
+# BONUS FEATURE 1: Cold-Start User Mode
+# If the user has never seen any movies (or doesn't want to pick),
+# they can enable Cold-Start Mode and answer quick questions instead.
+# The system then derives genre preferences automatically — no prior
+# movie knowledge required.
+# ------------------------------------------------------------------
+cold_start_mode = st.sidebar.toggle("🧊 Cold-Start Mode (New User?)", value=False,
+    help="Enable this if you haven't watched many movies and don't know what to pick.")
 
-preferred_genres = st.sidebar.multiselect(
-    "Preferred Genres:", 
-    options=genre_list
-)
+if cold_start_mode:
+    st.sidebar.info("Answer the questions below — we'll figure out your taste for you!")
 
+    cs_vibe = st.sidebar.selectbox(
+        "What kind of stories do you enjoy?",
+        ["Action & Excitement", "Laughs & Fun", "Deep & Emotional", "Scary & Tense", "Fantasy & Wonder"]
+    )
+    cs_time = st.sidebar.selectbox(
+        "How much time do you have?",
+        ["Under 90 min", "90–120 min", "Any length"]
+    )
+    cs_era = st.sidebar.selectbox(
+        "Do you prefer movies from a certain era?",
+        ["No preference", "Classic (before 2000)", "Modern (2000 and after)"]
+    )
+
+    # Translate cold-start answers into genre list and runtime cap
+    COLD_START_GENRE_MAP = {
+        "Action & Excitement": ["Action", "Adventure", "Science Fiction"],
+        "Laughs & Fun":        ["Comedy", "Animation", "Family"],
+        "Deep & Emotional":    ["Drama", "Romance", "History"],
+        "Scary & Tense":       ["Horror", "Thriller", "Mystery"],
+        "Fantasy & Wonder":    ["Fantasy", "Science Fiction", "Adventure"],
+    }
+    liked_movies_titles  = []
+    preferred_genres     = COLD_START_GENRE_MAP.get(cs_vibe, [])
+
+    if cs_time == "Under 90 min":
+        max_runtime = 90
+    elif cs_time == "90–120 min":
+        max_runtime = 120
+    else:
+        max_runtime = 240
+
+    if cs_era == "Classic (before 2000)":
+        cold_start_year_max = 1999
+    elif cs_era == "Modern (2000 and after)":
+        cold_start_year_max = 2000
+    else:
+        cold_start_year_max = None
+
+    family_friendly = False
+    st.sidebar.markdown(f"*Detected preferences:* **{', '.join(preferred_genres)}**")
+
+else:
+    cold_start_year_max = None
+
+    liked_movies_titles = st.sidebar.multiselect(
+        "Select 1-3 movies you liked:",
+        options=movies_df['title'].unique(),
+        max_selections=3
+    )
+
+    # ------------------------------------------------------------------
+    # BONUS FEATURE 2: Mood-Based Recommendations
+    # Instead of manually choosing genres, the user picks their current
+    # mood. The system maps the mood to relevant genres automatically.
+    # If a mood is selected it overrides the manual genre selector.
+    # ------------------------------------------------------------------
+    selected_mood = st.sidebar.selectbox(
+        "🎭 What's your mood right now? (optional)",
+        options=["No mood selected"] + list(MOOD_GENRE_MAP.keys()),
+        help="Pick a mood and we'll choose the right genres for you automatically."
+    )
+
+    if selected_mood != "No mood selected":
+        preferred_genres = MOOD_GENRE_MAP[selected_mood]
+        st.sidebar.markdown(f"*Mood mapped to:* **{', '.join(preferred_genres)}**")
+    else:
+        preferred_genres = st.sidebar.multiselect(
+            "Preferred Genres:",
+            options=genre_list
+        )
+
+    st.sidebar.markdown("---")
+    st.sidebar.header("🔧 Constraints")
+    max_runtime     = st.sidebar.slider("Max Runtime (minutes):", min_value=60, max_value=240, value=150)
+    family_friendly = st.sidebar.checkbox("Family Friendly (Exclude Adult Movies)", value=False)
+
+# ------------------------------------------------------------------
+# BONUS FEATURE 3: Genre Diversity Control
+# Controls how diverse the recommendations are across genres.
+# 0% = all recommendations from the same top genre.
+# 100% = each recommendation is from a different genre.
+# Implemented via a post-filtering step that enforces genre variety.
+# ------------------------------------------------------------------
 st.sidebar.markdown("---")
-st.sidebar.header(" Constraints")
-max_runtime = st.sidebar.slider("Max Runtime (minutes):", min_value=60, max_value=240, value=150)
-family_friendly = st.sidebar.checkbox("Family Friendly (Exclude Adult Movies)", value=False)
+diversity_level = st.sidebar.slider(
+    "🎨 Genre Diversity Level",
+    min_value=0, max_value=100, value=50, step=25,
+    help="0% = same genre focus | 100% = max variety across genres"
+)
+
+def apply_diversity(candidates, diversity_pct):
+    """
+    BONUS — Genre Diversity Filter:
+    At 0%: no diversity enforcement (return as-is).
+    At 25–50%: allow at most 2 movies per genre.
+    At 75–100%: allow at most 1 movie per genre (maximum variety).
+    """
+    if diversity_pct == 0 or not candidates:
+        return candidates
+    max_per_genre = 1 if diversity_pct >= 75 else 2
+    seen_genres   = {}
+    diverse_list  = []
+    for movie in candidates:
+        primary_genre = str(movie.get('genres', '')).split(',')[0].strip()
+        count = seen_genres.get(primary_genre, 0)
+        if count < max_per_genre:
+            diverse_list.append(movie)
+            seen_genres[primary_genre] = count + 1
+    return diverse_list
 
 # 3. Main Logic - Generating Recommendations
 if st.button("Generate Recommendations", type="primary"):
@@ -124,7 +248,7 @@ if st.button("Generate Recommendations", type="primary"):
         # METHOD A: Content-Based Filtering
         # -------------------------------------------------------------
         with col1:
-            st.header(" Method A: Content-Based")
+            st.header("🔍 Method A: Content-Based")
             st.caption("Finds movies similar to the ones you already like using TF-IDF text analysis.")
             
             if not liked_movies_titles:
@@ -164,8 +288,8 @@ if st.button("Generate Recommendations", type="primary"):
                     with st.container(border=True):
                         st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
                         st.markdown(f"**Explanation:** Recommended because it has a **{similarity:.1f}% similarity** to your liked movies based on its overview and genres.")
-                        st.markdown(f"** Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
-                        st.caption(f" Genres: {row['genres']} | ⏱ Runtime: {row['runtime']} min |  Avg Rating: {row['vote_average']}")
+                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
+                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
                     
                     count_a += 1
                     if count_a >= 3: # Show top 3
@@ -178,7 +302,7 @@ if st.button("Generate Recommendations", type="primary"):
         # METHOD B: Heuristic/Rating-Based
         # -------------------------------------------------------------
         with col2:
-            st.header(" Method B: Top Rated & Popular")
+            st.header("⭐ Method B: Top Rated & Popular")
             st.caption("Recommends highly-rated blockbusters tailored to your constraints.")
             
             # Start with all movies
@@ -188,6 +312,11 @@ if st.button("Generate Recommendations", type="primary"):
             filtered_df = filtered_df[filtered_df['runtime'] <= max_runtime]
             if family_friendly:
                 filtered_df = filtered_df[filtered_df['adult'] == False]
+            # BONUS — Cold-Start era filter: restrict by release year if user chose an era
+            if cold_start_year_max == 1999:
+                filtered_df = filtered_df[filtered_df['year'] < 2000]
+            elif cold_start_year_max == 2000:
+                filtered_df = filtered_df[filtered_df['year'] >= 2000]
                 
             if preferred_genres:
                 # Keep movies that have AT LEAST ONE of the preferred genres
@@ -217,8 +346,8 @@ if st.button("Generate Recommendations", type="primary"):
                     with st.container(border=True):
                         st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
                         st.markdown(f"**Explanation:** {reason} (Score: **{row['heuristic_score']*100:.1f}**)")
-                        st.markdown(f"** Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
-                        st.caption(f"Genres: {row['genres']} | Runtime: {row['runtime']} min | Avg Rating: {row['vote_average']}")
+                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
+                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
             else:
                 st.info("No heuristic recommendations found matching your constraints.")
 
@@ -226,7 +355,7 @@ if st.button("Generate Recommendations", type="primary"):
         # SECTION C: Watch Plan Builder
         # -------------------------------------------------------------
         st.markdown("---")
-        st.header(" Your Personalized Watch Plan")
+        st.header("📅 Your Personalized Watch Plan")
         st.caption(
             "A short viewing schedule built from the top recommendations above. "
             "Movies are ordered by Neural Net preference score and spread across your chosen days."
@@ -300,9 +429,11 @@ if st.button("Generate Recommendations", type="primary"):
         if not watch_candidates:
             st.info("No movies available to build a watch plan. Adjust your constraints and try again.")
         else:
+            # BONUS — apply genre diversity control before building the schedule
+            watch_candidates = apply_diversity(watch_candidates, diversity_level)
             # ── User chooses plan duration ────────────────────────────
             num_days = st.slider(
-                " Spread your watch plan over how many days?",
+                "📆 Spread your watch plan over how many days?",
                 min_value=1, max_value=7,
                 value=min(3, len(watch_candidates))
             )
@@ -316,7 +447,7 @@ if st.button("Generate Recommendations", type="primary"):
             # Assign one movie per day
             day_labels = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
-            st.markdown("###  Watch Schedule")
+            st.markdown("### 🗓️ Watch Schedule")
             total_runtime = 0
 
             for day_idx, movie in enumerate(plan_movies):
@@ -330,15 +461,15 @@ if st.button("Generate Recommendations", type="primary"):
                     dcol1, dcol2 = st.columns([1, 4])
 
                     with dcol1:
-                        st.markdown(f"### Day {day_idx + 1}")
+                        st.markdown(f"### 📅 Day {day_idx + 1}")
                         st.markdown(f"**{day_name}**")
 
                     with dcol2:
-                        st.markdown(f"####  {movie['title']} ({year_str})")
-                        st.caption(f" {movie['genres']}  |  {runtime} min  |   {movie['vote_average']}")
+                        st.markdown(f"#### 🎬 {movie['title']} ({year_str})")
+                        st.caption(f"🎭 {movie['genres']}  |  ⏱️ {runtime} min  |  ⭐ {movie['vote_average']}")
 
                         # Progress bar for preference score
-                        st.markdown(f"** Predicted Enjoyment:** {pref_pct:.1f}%")
+                        st.markdown(f"**🧠 Predicted Enjoyment:** {pref_pct:.1f}%")
                         st.progress(movie['pref_score'])
 
                         # Explain why it's in the plan
@@ -346,7 +477,7 @@ if st.button("Generate Recommendations", type="primary"):
                             reason = "Selected because it closely matches the style and themes of your liked movies."
                         else:
                             reason = "Selected because it is among the highest-rated and most popular films in your preferences."
-                        st.markdown(f"* Why this movie?* {reason}")
+                        st.markdown(f"*💡 Why this movie?* {reason}")
 
             # ── Plan Summary ──────────────────────────────────────────
             st.markdown("---")
