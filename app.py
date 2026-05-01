@@ -513,7 +513,8 @@ if st.button("Generate Recommendations", type="primary"):
             """)
             st.caption("This satisfies the requirement to compare at least two AI approaches.")
 
-            # ── Plan Summary ──────────────────────────────────────────
+        # ── Plan Summary (outside columns, only shown if a plan was built) ──
+        if watch_candidates:
             st.markdown("---")
             sum_col1, sum_col2, sum_col3 = st.columns(3)
             sum_col1.metric("🎬 Movies in Plan", len(plan_movies))
