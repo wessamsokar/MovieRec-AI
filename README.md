@@ -19,6 +19,15 @@ This project is a fully-functional Movie Recommendation and Viewing Planner prot
    - Trains a Multi-Layer Perceptron (MLP) on the user's rating history.
    - Predicts a personalized "Preference Score" indicating the likelihood a user will enjoy a recommended movie based on features like runtime, vote average, release year, and popularity.
 
+## 🌟 Bonus Features (Stretch Goals)
+
+This prototype includes several advanced features that go beyond the core requirements to enhance the user experience:
+
+- **🧊 Cold-Start User Mode:** A solution for new users without a viewing history. It asks three simple questions (preferred story vibe, available time, and era) to automatically infer genres and filter criteria, avoiding the traditional "blank slate" problem.
+- **🎭 Mood-Based Recommendations:** Instead of manually picking genres, users can select their current emotional state (e.g., Happy, Adventurous, Thoughtful). The system dynamically maps this mood to the optimal set of movie genres.
+- **🎨 Genre Diversity Control:** A dynamic slider (0% to 100%) that enforces content variety. When set higher, the filtering algorithm actively limits how many recommendations can share the same primary genre, ensuring a well-rounded list.
+- **📅 Personalized Watch Plan:** The system goes beyond listing movies by automatically constructing a cohesive day-by-day viewing schedule, sorted intelligently by the Neural Network's predicted enjoyment score.
+
 ## File Structure
 
 - `app.py`: The main Streamlit web application, containing UI elements, recommendation logic (Content-Based and Heuristic), and Neural Network inference.
