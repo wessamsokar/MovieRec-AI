@@ -1,47 +1,57 @@
-# AI Movie Recommendation & Viewing Planner
+# CET251 - AI: Movie Recommendation & Viewing Planner
 
 **Course:** CET251 - Introduction to Artificial Intelligence  
 **Institution:** Elsewedy Polytechnic University
 
 ## Project Overview
 
-This project is a Movie Recommendation and Viewing Planner that helps users discover films based on their tastes, using AI search and prediction techniques to rank and explain recommendations.
+This project is a fully-functional Movie Recommendation and Viewing Planner prototype that leverages Artificial Intelligence and Machine Learning to help users discover films based on their specific tastes. It implements search and prediction techniques to accurately rank and explain personalized movie recommendations.
 
 ## Core AI Concepts Used
 
-- **Content-Based Recommendation (TF-IDF + Cosine Similarity):** Builds a text representation from movie genres and overviews, then recommends movies similar to the user-selected favorites.
-- **Heuristic/Rule-Based Recommendation:** Ranks movies using a weighted combination of average rating and popularity, filtered by the user's constraints.
-- **Neural Network Component (MLPClassifier):** Trains a small MLP to predict the likelihood a user will like a movie using the features runtime, vote_average, year, and popularity; the predicted score is displayed next to each recommendation.
+1. **Content-Based Recommendation (TF-IDF & Cosine Similarity):** 
+   - Builds a text vector representation from movie genres and overviews. 
+   - Computes cosine similarity to recommend movies contextually similar to the user's selected favorites.
+2. **Heuristic/Rule-Based Recommendation:** 
+   - Ranks movies using a robust weighted heuristic (70% Average Rating, 30% Popularity).
+   - Dynamically filters based on strict user constraints (Runtime, Adult Content, Genres).
+3. **Neural Network Component (MLPClassifier):** 
+   - Trains a Multi-Layer Perceptron (MLP) on the user's rating history.
+   - Predicts a personalized "Preference Score" indicating the likelihood a user will enjoy a recommended movie based on features like runtime, vote average, release year, and popularity.
 
-## Project Structure
+## File Structure
 
-- [app.py](app.py): Streamlit UI, recommendation logic (content-based + heuristic), and neural network training/prediction pipeline.
-- [data_loader.py](data_loader.py): Data loading, cleaning, and subsetting to ensure 100-500 movies are used.
-- [movies_metadata.csv](movies_metadata.csv): Movie metadata used for features and content-based similarity.
-- [ratings_small.csv](ratings_small.csv): User ratings used to train the neural network.
+- `app.py`: The main Streamlit web application, containing UI elements, recommendation logic (Content-Based and Heuristic), and Neural Network inference.
+- `data_loader.py`: Handles data ingestion, cleaning, and strict subsetting to maintain the required dataset size constraint of 100-500 movies for optimal performance.
+- `movies_metadata.csv`: Contains the dataset of movie metadata used for features, TF-IDF vectorization, and UI display.
+- `ratings_small.csv`: Contains user interactions and ratings used to train the Neural Network.
+- `requirements.txt`: Specifies the exact Python library dependencies to ensure seamless cross-platform execution.
+- `.gitignore`: Standard exclusion list for repository hygiene.
 
 ## Prerequisites and Installation
 
-**Required libraries:** pandas, scikit-learn, streamlit, numpy
-
-Install dependencies:
-
-```bash
-pip install streamlit pandas scikit-learn numpy
-```
-
-## How to Run
-
-Start the application:
+1. Clone or download this project workspace.
+2. Ensure you have Python installed.
+3. Install the required dependencies using `pip`:
 
 ```bash
-streamlit run app.py
+pip install -r requirements.txt
 ```
 
-Then open the localhost URL shown in the terminal in your browser.
+## How to Run the App
 
-## How to Use the App
+Execute the following command in your terminal from the project's root directory:
 
-1. In the sidebar, select 1-3 movies you like and optionally choose preferred genres.
-2. Set constraints like maximum runtime and family-friendly filtering.
-3. Click **Generate Recommendations** to view ranked results, explanations, and neural network preference scores.
+```bash
+python -m streamlit run app.py
+```
+*(Or use `py -m streamlit run app.py` on Windows)*
+
+Once the local server starts, the app will automatically open in your default web browser.
+
+## Using the Interface
+
+1. **Set Preferences:** In the left sidebar, select up to 3 movies you like and optionally choose preferred genres.
+2. **Set Constraints:** Adjust the Max Runtime slider and toggle the Family Friendly checkbox based on your viewing availability.
+3. **Generate:** Click the **Generate Recommendations** button.
+4. **Evaluate:** The application will display Method A (Content-Based) and Method B (Heuristic) recommendations side-by-side, complete with textual explanations and Neural Network preference predictions, followed by an explicit Method Comparison summary.

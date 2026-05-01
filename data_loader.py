@@ -3,7 +3,7 @@ import pandas as pd
 import ast
 
 
-def load_movies(path="data/movies_metadata.csv", min_votes=50, min_movies=100, max_movies=500):
+def load_movies(path="movies_metadata.csv", min_votes=50, min_movies=100, max_movies=500):
     df = pd.read_csv(path, low_memory=False)
 
     def parse_genres(x):
@@ -61,7 +61,7 @@ def load_movies(path="data/movies_metadata.csv", min_votes=50, min_movies=100, m
     return filtered
 
 
-def load_ratings(path="data/ratings_small.csv"):
+def load_ratings(path="ratings_small.csv"):
     df = pd.read_csv(path)
     for col in ["movieId","userId","rating"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")

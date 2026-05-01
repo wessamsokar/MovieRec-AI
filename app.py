@@ -75,6 +75,11 @@ def get_content_similarity_matrix(movies):
     cosine_sim = cosine_similarity(tfidf_matrix, tfidf_matrix)
     return cosine_sim
 
+@st.cache_data
+def get_cached_genre_list(movies_df):
+    """Cache the genre list extraction to prevent heavy recomputations."""
+    return get_genre_list(movies_df)
+
 def predict_preference(movie_row, model, scaler):
     """Predict the 'Preference Score' using the trained Neural Network."""
     if model is None:
@@ -94,7 +99,7 @@ st.markdown("Prototype using Scikit-Learn (TF-IDF, Cosine Similarity, & MLPClass
 # 1. Load Data & Models
 with st.spinner("Loading data and training AI models..."):
     movies_df, ratings_df = load_data()
-    genre_list = get_genre_list(movies_df)
+    genre_list = get_cached_genre_list(movies_df)
     nn_model, scaler, nn_accuracy = train_nn_model(movies_df, ratings_df)
     cosine_sim = get_content_similarity_matrix(movies_df)
 
@@ -266,28 +271,32 @@ if st.button("Generate Recommendations", type="primary"):
                 # Find indices of the selected liked movies
                 liked_indices = movies_df[movies_df['title'].isin(liked_movies_titles)].index.tolist()
                 
-                # Average the similarity scores of the liked movies
-                sim_scores = np.zeros(len(movies_df))
-                for idx in liked_indices:
-                    sim_scores += cosine_sim[idx]
-                sim_scores = sim_scores / len(liked_indices)
-                
-                # Sort movies by similarity score
-                movie_indices = np.argsort(sim_scores)[::-1]
-                
-                # Filter out the movies the user already selected
-                rec_indices = [i for i in movie_indices if i not in liked_indices]
+                if len(liked_indices) == 0:
+                    st.info("Could not process selected movies.")
+                    rec_indices = []
+                else:
+                    # Average the similarity scores (Vectorized for maximum speed)
+                    sim_scores = cosine_sim[liked_indices].mean(axis=0)
+                    
+                    # Sort movies by similarity score
+                    movie_indices = np.argsort(sim_scores)[::-1]
+                    
+                    # Filter out the movies the user already selected
+                    rec_indices = [i for i in movie_indices if i not in liked_indices]
                 
                 count_a = 0
                 for i in rec_indices:
                     row = movies_df.iloc[i]
                     
-                    # Apply hard constraints
-                    if row['runtime'] > max_runtime: continue
+                    # Apply hard constraints (with safety for NaN values)
+                    if pd.isna(row['runtime']) or row['runtime'] > max_runtime: continue
                     if family_friendly and row['adult'] == True: continue
                     if preferred_genres:
-                        movie_genres = [g.strip() for g in row['genres'].split(',')]
-                        if not any(g in movie_genres for g in preferred_genres):
+                        try:
+                            movie_genres = [g.strip() for g in str(row['genres']).split(',')]
+                            if not any(g in movie_genres for g in preferred_genres):
+                                continue
+                        except Exception:
                             continue
                     
                     # Display recommendation
@@ -330,7 +339,7 @@ if st.button("Generate Recommendations", type="primary"):
             if preferred_genres:
                 # Keep movies that have AT LEAST ONE of the preferred genres
                 pattern = '|'.join(preferred_genres)
-                filtered_df = filtered_df[filtered_df['genres'].str.contains(pattern, case=False, na=False)]
+                filtered_df = filtered_df[filtered_df['genres'].astype(str).str.contains(pattern, case=False, na=False)]
                 
             # Exclude already liked movies
             if liked_movies_titles:
@@ -338,8 +347,10 @@ if st.button("Generate Recommendations", type="primary"):
                 
             if len(filtered_df) > 0:
                 # Create a heuristic score combining vote average (70%) and popularity (30%)
-                filtered_df['norm_vote'] = filtered_df['vote_average'] / filtered_df['vote_average'].max()
-                filtered_df['norm_pop'] = filtered_df['popularity'] / filtered_df['popularity'].max()
+                vote_max = filtered_df['vote_average'].max()
+                pop_max = filtered_df['popularity'].max()
+                filtered_df['norm_vote'] = filtered_df['vote_average'] / vote_max if vote_max > 0 else 0
+                filtered_df['norm_pop'] = filtered_df['popularity'] / pop_max if pop_max > 0 else 0
                 filtered_df['heuristic_score'] = (filtered_df['norm_vote'] * 0.7) + (filtered_df['norm_pop'] * 0.3)
                 
                 # Get top 3
