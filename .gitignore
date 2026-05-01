@@ -1,17 +1,31 @@
-Act as a Senior AI Software Engineer and a strict Course Teaching Assistant. I need you to thoroughly audit, optimize, and finalize the entire "Movie Recommendation & Viewing Planner" workspace to ensure maximum efficiency, strict adherence to project requirements, and readiness for a university grading demo.
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
 
-Your Audit & Optimization Checklist:
+# Virtual environments
+venv/
+env/
+.venv/
+.env
 
-1. Core Logic & ML Performance: Inspect `app.py` and `data_loader.py`. Ensure the two recommendation methods (Content-Based and Heuristic) and the Neural Network (MLP predicting preference using runtime, vote_average, year, popularity) are highly optimized, bug-free, and properly cached (e.g., using Streamlit's `@st.cache_data` or `@st.cache_resource` for data and models). CRITICAL: Ensure the dataset size strictly remains limited to the required 100-500 movies constraint.
-2. UI & Evaluation: Verify the Streamlit UI flawlessly and efficiently displays: User Inputs, Ranked Outputs, textual Explanations for recommendations, NN preference scores, and the explicit Method Comparison summary.
-3. Documentation Sync: Directly rewrite or update the `README.md` file to reflect the final state of the code. It must include the Project Title (CET251 - AI), core concepts, file structure, and clear run instructions.
-4. Dependency Management: Scan the workspace and directly generate/update `requirements.txt` with the exact necessary libraries (pandas, scikit-learn, streamlit, etc.) to ensure flawless execution on another machine.
+# IDEs
+.idea/
+.vscode/
 
-Execution Rules:
+# Datasets and Large files
+*.csv
+*.tsv
+*.zip
+*.tar.gz
+*.rar
+data/
+datasets/
 
-- CRITICAL: Do NOT output any code blocks, scripts, or markdown code snippets in this chat response under any circumstances. You must directly edit the files in the workspace to apply optimizations and update the documentation.
-- Once all modifications are successfully applied directly to the files, reply here with ONLY a brief diagnostic summary in this exact format:
+# Jupyter Notebook
+.ipynb_checkpoints/
 
-[Optimizations Applied]: (Brief 1-sentence summary of what was cached/optimized)
-[Documentation & Specs]: (Confirm README and requirements.txt are synced)
-[Project Status]: [100% Ready for Submission & Live Demo]
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini
