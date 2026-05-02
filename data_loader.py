@@ -1,14 +1,15 @@
 
 import pandas as pd
+import numpy as np
 import ast
 
 
-def load_movies(path="movies_metadata.csv", min_votes=50, min_movies=100, max_movies=500):
+def load_movies(path="data/movies_metadata.csv", min_votes=50, min_movies=100, max_movies=500):
     df = pd.read_csv(path, low_memory=False)
 
     def parse_genres(x):
         try:
-            return ",".join([g["name"] for g in ast.literal_eval(x) if "name" in g])
+            return ",".join([g["name"] for g in ast.literal_eval(x) if "name" in g])  
         except Exception:
             return ""
 
@@ -61,7 +62,7 @@ def load_movies(path="movies_metadata.csv", min_votes=50, min_movies=100, max_mo
     return filtered
 
 
-def load_ratings(path="ratings_small.csv"):
+def load_ratings(path="data/ratings_small.csv"):
     df = pd.read_csv(path)
     for col in ["movieId","userId","rating"]:
         df[col] = pd.to_numeric(df[col], errors="coerce")
@@ -78,3 +79,5 @@ def get_genre_list(movies_df):
             if g:
                 genres.add(g)
     return sorted(genres)
+if __name__ == "__main__":
+    movies = load_movies()
