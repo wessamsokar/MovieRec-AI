@@ -9,13 +9,13 @@ This project is a fully-functional Movie Recommendation and Viewing Planner prot
 
 ## Core AI Concepts Used
 
-1. **Content-Based Recommendation (TF-IDF & Cosine Similarity):** 
-   - Builds a text vector representation from movie genres and overviews. 
+1. **Content-Based Recommendation (TF-IDF & Cosine Similarity):**
+   - Builds a text vector representation from movie genres and overviews.
    - Computes cosine similarity to recommend movies contextually similar to the user's selected favorites.
-2. **Heuristic/Rule-Based Recommendation:** 
+2. **Heuristic/Rule-Based Recommendation:**
    - Ranks movies using a robust weighted heuristic (70% Average Rating, 30% Popularity).
    - Dynamically filters based on strict user constraints (Runtime, Adult Content, Genres).
-3. **Neural Network Component (MLPClassifier):** 
+3. **Neural Network Component (MLPClassifier):**
    - Trains a Multi-Layer Perceptron (MLP) on the user's rating history.
    - Predicts a personalized "Preference Score" indicating the likelihood a user will enjoy a recommended movie based on features like runtime, vote average, release year, and popularity.
 
@@ -54,7 +54,8 @@ Execute the following command in your terminal from the project's root directory
 ```bash
 python -m streamlit run app.py
 ```
-*(Or use `py -m streamlit run app.py` on Windows)*
+
+_(Or use `py -m streamlit run app.py` on Windows)_
 
 Once the local server starts, the app will automatically open in your default web browser.
 
@@ -64,3 +65,7 @@ Once the local server starts, the app will automatically open in your default we
 2. **Set Constraints:** Adjust the Max Runtime slider and toggle the Family Friendly checkbox based on your viewing availability.
 3. **Generate:** Click the **Generate Recommendations** button.
 4. **Evaluate:** The application will display Method A (Content-Based) and Method B (Heuristic) recommendations side-by-side, complete with textual explanations and Neural Network preference predictions, followed by an explicit Method Comparison summary.
+
+## Dataset
+This project uses the [Movie Dataset from Kaggle](<insert-url>).
+Please replace <insert-url> with the actual Kaggle dataset URL if known.

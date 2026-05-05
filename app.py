@@ -7,6 +7,7 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score   
+from sklearn.neighbors import NearestNeighbors
 from data_loader import load_movies, load_ratings, get_genre_list
 
 # Setup Streamlit page
@@ -26,8 +27,16 @@ def train_nn_model(movies, ratings):
     Train a simple Multi-Layer Perceptron (Neural Network) 
     to predict if a user will like a movie based on its features.
     """
+    # Guard against too-small or empty datasets to avoid runtime crashes.
+    if movies is None or ratings is None or len(movies) < 10 or len(ratings) < 10:
+        st.error("Neural network training skipped: dataset is empty or has fewer than 10 rows.")
+        return None, None, 0.0
+
     # Merge ratings with movie features to build the training set
     merged = pd.merge(ratings, movies, left_on="movieId", right_on="id", how="inner")
+    if len(merged) < 10:
+        st.error("Neural network training skipped: merged training data has fewer than 10 rows.")
+        return None, None, 0.0
     
     # Synthetic target: Like (1) if rating >= 3.5, else Dislike (0)
     merged['liked'] = (merged['rating'] >= 3.5).astype(int)
@@ -76,6 +85,59 @@ def get_content_similarity_matrix(movies):
     return cosine_sim
 
 @st.cache_data
+def get_knn_feature_data(movies):
+    """
+    Build a feature matrix for item-item KNN collaborative-style recommendations.
+    Uses genres (TF-IDF) + numeric movie signals.
+    """
+    genre_tfidf = TfidfVectorizer(stop_words="english")
+    genre_matrix = genre_tfidf.fit_transform(movies["genres"].fillna(""))
+
+    numeric_cols = ["vote_average", "popularity", "runtime", "year"]
+    numeric = movies[numeric_cols].fillna(0).to_numpy(dtype=float)
+    scaler = StandardScaler()
+    numeric_scaled = scaler.fit_transform(numeric)
+
+    feature_matrix = np.hstack([genre_matrix.toarray(), numeric_scaled])
+    return feature_matrix
+
+@st.cache_resource
+def build_knn_model(movies):
+    feature_matrix = get_knn_feature_data(movies)
+    n_neighbors = min(21, len(movies))
+    knn = NearestNeighbors(metric="cosine", algorithm="brute", n_neighbors=n_neighbors)
+    knn.fit(feature_matrix)
+    return knn, feature_matrix
+
+def get_collaborative_recommendations(movie_title, df, n=10):
+    """
+    KNN-based collaborative-style item recommendations from movie feature neighborhoods.
+    Returns ranked recommendations with similarity scores.
+    """
+    if movie_title is None or movie_title not in df["title"].values:
+        return []
+    if len(df) < 2:
+        return []
+
+    knn_model, feature_matrix = build_knn_model(df)
+    idx = df.index[df["title"] == movie_title][0]
+    distances, indices = knn_model.kneighbors(feature_matrix[idx].reshape(1, -1), n_neighbors=min(n + 1, len(df)))
+
+    recs = []
+    for dist, rec_idx in zip(distances[0], indices[0]):
+        if rec_idx == idx:
+            continue
+        rec_row = df.iloc[rec_idx]
+        recs.append({
+            "index": rec_idx,
+            "title": rec_row["title"],
+            "score": 1 - float(dist)
+        })
+        if len(recs) >= n:
+            break
+    return recs
+
+@st.cache_data
 def get_cached_genre_list(movies_df):
     """Cache the genre list extraction to prevent heavy recomputations."""
     return get_genre_list(movies_df)
@@ -102,6 +164,7 @@ with st.spinner("Loading data and training AI models..."):
     genre_list = get_cached_genre_list(movies_df)
     nn_model, scaler, nn_accuracy = train_nn_model(movies_df, ratings_df)
     cosine_sim = get_content_similarity_matrix(movies_df)
+    knn_model, knn_feature_matrix = build_knn_model(movies_df)
 
 # =============================================================
 # BONUS FEATURES — Stretch Ideas (Cold-Start, Genre Diversity,
@@ -210,6 +273,7 @@ else:
     st.sidebar.markdown("---")
     st.sidebar.header("🔧 Constraints")
     max_runtime     = st.sidebar.slider("Max Runtime (minutes):", min_value=60, max_value=240, value=150)
+    min_rating      = st.sidebar.slider("Minimum Movie Rating", min_value=0.0, max_value=10.0, value=6.0, step=0.1)
     family_friendly = st.sidebar.checkbox("Family Friendly (Exclude Adult Movies)", value=False)
 
 # ------------------------------------------------------------------
@@ -255,8 +319,8 @@ if st.button("Generate Recommendations", type="primary"):
     else:
         st.markdown("---")
         
-        # Layout columns for the two methods
-        col1, col2 = st.columns(2)
+        # Layout columns for the three methods
+        col1, col2, col3 = st.columns(3)
         
         # -------------------------------------------------------------
         # METHOD A: Content-Based Filtering
@@ -290,6 +354,7 @@ if st.button("Generate Recommendations", type="primary"):
                     
                     # Apply hard constraints (with safety for NaN values)
                     if pd.isna(row['runtime']) or row['runtime'] > max_runtime: continue
+                    if pd.isna(row['vote_average']) or row['vote_average'] < min_rating: continue
                     if family_friendly and row['adult'] == True: continue
                     if preferred_genres:
                         try:
@@ -328,6 +393,7 @@ if st.button("Generate Recommendations", type="primary"):
             
             # Apply constraints
             filtered_df = filtered_df[filtered_df['runtime'] <= max_runtime]
+            filtered_df = filtered_df[filtered_df['vote_average'] >= min_rating]
             if family_friendly:
                 filtered_df = filtered_df[filtered_df['adult'] == False]
             # BONUS — Cold-Start era filter: restrict by release year if user chose an era
@@ -372,6 +438,48 @@ if st.button("Generate Recommendations", type="primary"):
                 st.info("No heuristic recommendations found matching your constraints.")
 
         # -------------------------------------------------------------
+        # METHOD C: Collaborative Filtering (KNN)
+        # -------------------------------------------------------------
+        with col3:
+            st.header("🤝 Method C: Collaborative Filtering (KNN)")
+            st.caption("Finds nearest movies in a learned feature neighborhood using KNN.")
+
+            if not liked_movies_titles:
+                st.info("Select at least one liked movie to run collaborative filtering.")
+            else:
+                seed_title = liked_movies_titles[0]
+                knn_recs = get_collaborative_recommendations(seed_title, movies_df, n=20)
+                count_c = 0
+
+                for rec in knn_recs:
+                    row = movies_df.iloc[rec["index"]]
+                    if pd.isna(row['runtime']) or row['runtime'] > max_runtime:
+                        continue
+                    if pd.isna(row['vote_average']) or row['vote_average'] < min_rating:
+                        continue
+                    if family_friendly and row['adult'] == True:
+                        continue
+                    if preferred_genres:
+                        movie_genres = [g.strip() for g in str(row['genres']).split(',')]
+                        if not any(g in movie_genres for g in preferred_genres):
+                            continue
+
+                    pref_score = predict_preference(row, nn_model, scaler) * 100
+                    sim_score = rec["score"] * 100
+                    with st.container(border=True):
+                        st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
+                        st.markdown(f"**Explanation:** Close KNN neighbor of **{seed_title}** with **{sim_score:.1f}% neighborhood similarity**.")
+                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
+                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
+
+                    count_c += 1
+                    if count_c >= 3:
+                        break
+
+                if count_c == 0:
+                    st.info("No KNN collaborative recommendations found matching your constraints.")
+
+        # -------------------------------------------------------------
         # SECTION C: Watch Plan Builder
         # -------------------------------------------------------------
         st.markdown("---")
@@ -398,6 +506,8 @@ if st.button("Generate Recommendations", type="primary"):
                 row = movies_df.iloc[i]
                 if row['runtime'] > max_runtime:
                     continue
+                if row['vote_average'] < min_rating:
+                    continue
                 if family_friendly and row['adult'] == True:
                     continue
                 if preferred_genres:
@@ -420,6 +530,7 @@ if st.button("Generate Recommendations", type="primary"):
         # Re-run heuristic top picks
         filtered_wp = movies_df.copy()
         filtered_wp = filtered_wp[filtered_wp['runtime'] <= max_runtime]
+        filtered_wp = filtered_wp[filtered_wp['vote_average'] >= min_rating]
         if family_friendly:
             filtered_wp = filtered_wp[filtered_wp['adult'] == False]
         if preferred_genres:
