@@ -398,7 +398,7 @@ if st.button("Generate Recommendations", type="primary"):
                     movie_indices = np.argsort(sim_scores)[::-1]
                     rec_indices = [i for i in movie_indices if i not in liked_indices]
 
-                    # BUG FIX 2: Collect a larger pool (up to 15) → apply diversity → show top 3
+                    
                     pool_a = []
                     for i in rec_indices:
                         row = movies_df.iloc[i]
