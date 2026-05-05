@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import html
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.neural_network import MLPClassifier
@@ -150,9 +151,129 @@ def apply_diversity(candidates, diversity_pct, top_n=3):
             break
     return diverse_list
 
+
+def render_movie_card(title, year, explanation, pref_score, genres, runtime, vote_average, theme_class="theme-a"):
+    """Render recommendation cards with one unified shape/style."""
+    year_text = str(int(year)) if pd.notnull(year) else "N/A"
+    runtime_text = f"{int(runtime)} min" if pd.notnull(runtime) else "N/A"
+    safe_title = html.escape(str(title))
+    safe_explanation = html.escape(str(explanation))
+    safe_genres = html.escape(str(genres))
+    rating_text = f"{float(vote_average):.1f}" if pd.notnull(vote_average) else "N/A"
+
+    st.markdown(
+        f"""
+        <div class="movie-card {theme_class}">
+          <div class="movie-card-title">{safe_title} ({year_text})</div>
+          <div class="movie-card-body"><b>Explanation:</b> {safe_explanation}</div>
+          <div class="movie-card-body"><b>🧠 Neural Net Predicts:</b> <b>{pref_score:.1f}%</b> chance you'll love it.</div>
+          <div class="movie-card-meta">🎭 Genres: {safe_genres} | ⏱️ Runtime: {runtime_text} | ⭐ Avg Rating: {rating_text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+
+def render_method_header(title, subtitle):
+    """Render method title/caption with fixed height for cross-column alignment."""
+    safe_title = html.escape(str(title))
+    safe_subtitle = html.escape(str(subtitle))
+    st.markdown(
+        f"""
+        <div class="method-header">
+          <div class="method-title">{safe_title}</div>
+          <div class="method-subtitle">{safe_subtitle}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 # ----------------- UI -----------------
-st.title("🎬 AI Movie Recommendation & Viewing Planner")
-st.markdown("Prototype using Scikit-Learn (TF-IDF, Cosine Similarity, & MLPClassifier) and Streamlit.")
+st.markdown(
+    """
+    <style>
+      .hero-box {
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        background: linear-gradient(135deg, rgba(255, 182, 193, 0.20), rgba(216, 191, 255, 0.18), rgba(255, 218, 185, 0.20));
+        border-radius: 16px;
+        padding: 18px 18px 14px 18px;
+        margin-bottom: 0.9rem;
+      }
+      .hero-title {
+        font-size: 1.65rem;
+        font-weight: 800;
+        line-height: 1.25;
+        margin-bottom: 0.3rem;
+      }
+      .hero-subtitle {
+        font-size: 0.95rem;
+        color: rgba(255, 255, 255, 0.88);
+        line-height: 1.45;
+      }
+      .movie-card {
+        border: 1px solid rgba(250, 250, 250, 0.18);
+        border-radius: 12px;
+        padding: 12px;
+        margin-bottom: 0.75rem;
+        min-height: 190px;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+      }
+      .movie-card-title {
+        font-size: 1.05rem;
+        font-weight: 700;
+        margin-bottom: 0.45rem;
+      }
+      .movie-card-body {
+        font-size: 0.95rem;
+        margin-bottom: 0.35rem;
+      }
+      .movie-card-meta {
+        font-size: 0.82rem;
+        color: rgba(250, 250, 250, 0.78);
+      }
+      .method-header {
+        min-height: 86px;
+        margin-bottom: 0.55rem;
+      }
+      .method-title {
+        font-size: 1.06rem;
+        font-weight: 700;
+        line-height: 1.3;
+        margin-bottom: 0.25rem;
+      }
+      .method-subtitle {
+        font-size: 0.84rem;
+        color: rgba(250, 250, 250, 0.78);
+        line-height: 1.35;
+      }
+      /* Method A - soft rose */
+      .movie-card.theme-a {
+        background: linear-gradient(135deg, rgba(255, 182, 193, 0.18), rgba(255, 105, 180, 0.10));
+        border-color: rgba(255, 182, 193, 0.45);
+      }
+      /* Method B - lavender */
+      .movie-card.theme-b {
+        background: linear-gradient(135deg, rgba(216, 191, 255, 0.18), rgba(186, 85, 211, 0.10));
+        border-color: rgba(216, 191, 255, 0.45);
+      }
+      /* Method C - peach */
+      .movie-card.theme-c {
+        background: linear-gradient(135deg, rgba(255, 218, 185, 0.20), rgba(255, 160, 122, 0.10));
+        border-color: rgba(255, 196, 160, 0.45);
+      }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+st.markdown(
+    """
+    <div class="hero-box">
+      <div class="hero-title">🎬 AI Movie Recommendation &amp; Viewing Planner</div>
+      <div class="hero-subtitle">Prototype using Scikit-Learn (TF-IDF, Cosine Similarity, &amp; MLPClassifier) and Streamlit.</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
 
 with st.spinner("Loading data and training AI models..."):
     movies_df, ratings_df = load_data()
@@ -260,8 +381,10 @@ if st.button("Generate Recommendations", type="primary"):
         # METHOD A: Content-Based Filtering
         # =============================================================
         with col1:
-            st.header("🔍 Method A: Content-Based")
-            st.caption("Finds movies similar to the ones you already like using TF-IDF text analysis.")
+            render_method_header(
+                "🔍 Method A: Content-Based",
+                "Finds movies similar to the ones you already like using TF-IDF text analysis."
+            )
 
             if not liked_movies_titles:
                 st.info("Select movies you like in the sidebar to see content-based recommendations.")
@@ -309,18 +432,25 @@ if st.button("Generate Recommendations", type="primary"):
                         st.info("No content-based recommendations found matching your constraints.")
                     else:
                         for m in top_a:
-                            with st.container(border=True):
-                                st.subheader(f"{m['title']} ({int(m['year']) if pd.notnull(m['year']) else 'N/A'})")
-                                st.markdown(f"**Explanation:** Recommended because it has a **{m['similarity']:.1f}% similarity** to your liked movies based on its overview and genres.")
-                                st.markdown(f"**🧠 Neural Net Predicts:** **{m['pref_score']*100:.1f}%** chance you'll love it.")
-                                st.caption(f"🎭 Genres: {m['genres']} | ⏱️ Runtime: {m['runtime']} min | ⭐ Avg Rating: {m['vote_average']}")
+                            render_movie_card(
+                                title=m["title"],
+                                year=m["year"],
+                                explanation=f"Recommended because it has a {m['similarity']:.1f}% similarity to your liked movies based on its overview and genres.",
+                                pref_score=m["pref_score"] * 100,
+                                genres=m["genres"],
+                                runtime=m["runtime"],
+                                vote_average=m["vote_average"],
+                                theme_class="theme-a"
+                            )
 
         # =============================================================
         # METHOD B: Heuristic / Rating-Based
         # =============================================================
         with col2:
-            st.header("⭐ Method B: Top Rated & Popular")
-            st.caption("Recommends highly-rated blockbusters tailored to your constraints.")
+            render_method_header(
+                "⭐ Method B: Top Rated & Popular",
+                "Recommends highly-rated blockbusters tailored to your constraints."
+            )
 
             # Start with all movies
             filtered_df = movies_df.copy()
@@ -363,11 +493,16 @@ if st.button("Generate Recommendations", type="primary"):
                     if preferred_genres:
                         reason = f"One of the best-rated and most popular movies in your preferred genres."
                         
-                    with st.container(border=True):
-                        st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
-                        st.markdown(f"**Explanation:** {reason} (Score: **{row['heuristic_score']*100:.1f}**)")
-                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
-                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
+                    render_movie_card(
+                        title=row["title"],
+                        year=row["year"],
+                        explanation=f"{reason} (Score: {row['heuristic_score']*100:.1f})",
+                        pref_score=pref_score,
+                        genres=row["genres"],
+                        runtime=row["runtime"],
+                        vote_average=row["vote_average"],
+                        theme_class="theme-b"
+                    )
             else:
                 st.info("No heuristic recommendations found matching your constraints.")
 
@@ -375,42 +510,69 @@ if st.button("Generate Recommendations", type="primary"):
         # METHOD C: Collaborative Filtering (KNN)
         # -------------------------------------------------------------
         with col3:
-            st.header("🤝 Method C: Collaborative Filtering (KNN)")
-            st.caption("Finds nearest movies in a learned feature neighborhood using KNN.")
+            render_method_header(
+                "🤝 Method C: Collaborative Filtering (KNN)",
+                "Finds nearest movies in a learned feature neighborhood using KNN."
+            )
 
             if not liked_movies_titles:
                 st.info("Select at least one liked movie to run collaborative filtering.")
             else:
-                seed_title = liked_movies_titles[0]
-                knn_recs = get_collaborative_recommendations(seed_title, movies_df, n=20)
-                count_c = 0
-
-                for rec in knn_recs:
-                    row = movies_df.iloc[rec["index"]]
-                    if pd.isna(row['runtime']) or row['runtime'] > max_runtime:
-                        continue
-                    if pd.isna(row['vote_average']) or row['vote_average'] < min_rating:
-                        continue
-                    if family_friendly and row['adult'] == True:
-                        continue
-                    if preferred_genres:
-                        movie_genres = [g.strip() for g in str(row['genres']).split(',')]
-                        if not any(g in movie_genres for g in preferred_genres):
+                # Aggregate neighbors from all selected seed movies to reduce empty-result cases.
+                aggregated = {}
+                for seed_title in liked_movies_titles:
+                    for rec in get_collaborative_recommendations(seed_title, movies_df, n=60):
+                        rec_title = rec["title"]
+                        if rec_title in liked_movies_titles:
                             continue
+                        if rec_title not in aggregated or rec["score"] > aggregated[rec_title]["score"]:
+                            aggregated[rec_title] = rec
 
-                    pref_score = predict_preference(row, nn_model, scaler) * 100
-                    sim_score = rec["score"] * 100
-                    with st.container(border=True):
-                        st.subheader(f"{row['title']} ({int(row['year']) if pd.notnull(row['year']) else 'N/A'})")
-                        st.markdown(f"**Explanation:** Close KNN neighbor of **{seed_title}** with **{sim_score:.1f}% neighborhood similarity**.")
-                        st.markdown(f"**🧠 Neural Net Predicts:** **{pref_score:.1f}%** chance you'll love it.")
-                        st.caption(f"🎭 Genres: {row['genres']} | ⏱️ Runtime: {row['runtime']} min | ⭐ Avg Rating: {row['vote_average']}")
+                ranked_recs = sorted(aggregated.values(), key=lambda x: x["score"], reverse=True)
 
-                    count_c += 1
-                    if count_c >= 3:
-                        break
+                def filter_knn(candidates, enforce_genre=True, enforce_min_rating=True):
+                    picked = []
+                    for rec in candidates:
+                        row = movies_df.iloc[rec["index"]]
+                        if pd.isna(row['runtime']) or row['runtime'] > max_runtime:
+                            continue
+                        if enforce_min_rating and (pd.isna(row['vote_average']) or row['vote_average'] < min_rating):
+                            continue
+                        if family_friendly and row['adult'] == True:
+                            continue
+                        if enforce_genre and preferred_genres:
+                            movie_genres = [g.strip() for g in str(row['genres']).split(',')]
+                            if not any(g in movie_genres for g in preferred_genres):
+                                continue
+                        picked.append((rec, row))
+                        if len(picked) >= 3:
+                            break
+                    return picked
 
-                if count_c == 0:
+                selected_knn = filter_knn(ranked_recs, enforce_genre=True, enforce_min_rating=True)
+                if not selected_knn:
+                    # Fallback 1: relax genre constraint only.
+                    selected_knn = filter_knn(ranked_recs, enforce_genre=False, enforce_min_rating=True)
+                if not selected_knn:
+                    # Fallback 2: relax min rating as well, keep runtime/family constraints.
+                    selected_knn = filter_knn(ranked_recs, enforce_genre=False, enforce_min_rating=False)
+
+                if selected_knn:
+                    seed_text = ", ".join(liked_movies_titles)
+                    for rec, row in selected_knn:
+                        pref_score = predict_preference(row, nn_model, scaler) * 100
+                        sim_score = rec["score"] * 100
+                        render_movie_card(
+                            title=row["title"],
+                            year=row["year"],
+                            explanation=f"Close KNN neighbor of your liked movies ({seed_text}) with {sim_score:.1f}% neighborhood similarity.",
+                            pref_score=pref_score,
+                            genres=row["genres"],
+                            runtime=row["runtime"],
+                            vote_average=row["vote_average"],
+                            theme_class="theme-c"
+                        )
+                else:
                     st.info("No KNN collaborative recommendations found matching your constraints.")
 
         # -------------------------------------------------------------
