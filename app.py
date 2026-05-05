@@ -578,8 +578,7 @@ if st.button("Generate Recommendations", type="primary"):
         # -------------------------------------------------------------
         # SECTION C: Watch Plan Builder
         # Uses the SAME pools already collected above — no duplicate logic
-        # BUG FIX: Watch plan now pulls from a bigger combined pool so
-        # diversity slider has real effect on the schedule too.
+        # diversity slider has real effect on the schedule too
         # =============================================================
         st.markdown("---")
         st.header("📅 Your Personalized Watch Plan")
