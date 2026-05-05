@@ -56,11 +56,7 @@ def predict_preference(movie_row, model, scaler):
     x = movie_row[features].fillna(0).values.reshape(1, -1)
     return model.predict_proba(scaler.transform(x))[0][1]
 
-# ------------------------------------------------------------------
-# BUG FIX 2: apply_diversity now works on both Method A, B AND Watch Plan.
-# Collects a larger pool (up to 10) first, then filters for diversity,
-# then returns top N — so diversity actually changes the results shown.
-# ------------------------------------------------------------------
+
 def apply_diversity(candidates, diversity_pct, top_n=3):
     """
     Enforces genre diversity across a list of candidate dicts that each have a 'genres' key.
