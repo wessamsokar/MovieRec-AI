@@ -67,5 +67,6 @@ Once the local server starts, the app will automatically open in your default we
 4. **Evaluate:** The application will display Method A (Content-Based) and Method B (Heuristic) recommendations side-by-side, complete with textual explanations and Neural Network preference predictions, followed by an explicit Method Comparison summary.
 
 ## Dataset
-This project uses the [Movie Dataset from Kaggle](<insert-url>).
-Please replace <insert-url> with the actual Kaggle dataset URL if known.
+
+This project uses the https://www.kaggle.com/datasets/rounakbanik/the-movies-dataset.
+Only used 2 files Metadata and Rating
