@@ -152,7 +152,7 @@ def apply_diversity(candidates, diversity_pct, top_n=3):
     return diverse_list
 
 
-def render_movie_card(title, year, explanation, pref_score, genres, runtime, vote_average, theme_class="theme-a"):
+def render_movie_card(title, year, explanation, pref_score, genres, runtime, vote_average, theme_class="theme-a", imdb_id=None):
     """Render recommendation cards with one unified shape/style."""
     year_text = str(int(year)) if pd.notnull(year) else "N/A"
     runtime_text = f"{int(runtime)} min" if pd.notnull(runtime) else "N/A"
@@ -161,6 +161,14 @@ def render_movie_card(title, year, explanation, pref_score, genres, runtime, vot
     safe_genres = html.escape(str(genres))
     rating_text = f"{float(vote_average):.1f}" if pd.notnull(vote_average) else "N/A"
 
+    # Build IMDb direct link if imdb_id is available
+    if imdb_id and str(imdb_id).startswith("tt"):
+        link_html = f'<a href="https://www.imdb.com/title/{imdb_id}/" target="_blank" style="color:#fbbf24; text-decoration:none; font-weight:600;">🎥 View on IMDb</a>'
+    else:
+        import urllib.parse
+        query = urllib.parse.quote_plus(str(title))
+        link_html = f'<a href="https://www.imdb.com/find/?q={query}&s=tt&ttype=ft" target="_blank" style="color:#fbbf24; text-decoration:none; font-weight:600;">🎥 Search on IMDb</a>'
+
     st.markdown(
         f"""
         <div class="movie-card {theme_class}">
@@ -168,6 +176,7 @@ def render_movie_card(title, year, explanation, pref_score, genres, runtime, vot
           <div class="movie-card-body"><b>Explanation:</b> {safe_explanation}</div>
           <div class="movie-card-body"><b>🧠 Neural Net Predicts:</b> <b>{pref_score:.1f}%</b> chance you'll love it.</div>
           <div class="movie-card-meta">🎭 Genres: {safe_genres} | ⏱️ Runtime: {runtime_text} | ⭐ Avg Rating: {rating_text}</div>
+          <div class="movie-card-meta" style="margin-top:8px;">🔗 {link_html}</div>
         </div>
         """,
         unsafe_allow_html=True
@@ -394,14 +403,14 @@ if st.button("Generate Recommendations", type="primary"):
                 if not liked_indices:
                     st.info("Could not process selected movies.")
                 else:
-                    sim_scores = cosine_sim[liked_indices].mean(axis=0)
-                    movie_indices = np.argsort(sim_scores)[::-1]
+                    sim_scores = cosine_sim[liked_indices].mean(axis=0)    #المين للصف 
+                    movie_indices = np.argsort(sim_scores)[::-1]  #عكس الترتيب
                     rec_indices = [i for i in movie_indices if i not in liked_indices]
 
-                    
+                    # BUG FIX 2: Collect a larger pool (up to 15) → apply diversity → show top 3
                     pool_a = []
                     for i in rec_indices:
-                        row = movies_df.iloc[i]
+                        row = movies_df.iloc[i]          #بجيب بيانات الصف للفيلم 
                         if pd.isna(row['runtime']) or row['runtime'] > max_runtime:
                             continue
                         if pd.isna(row['vote_average']) or row['vote_average'] < min_rating:
@@ -421,6 +430,7 @@ if st.button("Generate Recommendations", type="primary"):
                             'similarity': sim_scores[i] * 100,
                             'pref_score': predict_preference(row, nn_model, scaler),
                             'source': 'Content-Based',
+                            'imdb_id': row.get('imdb_id', None),
                             '_row': row,
                         })
                         if len(pool_a) >= 15:
@@ -440,7 +450,8 @@ if st.button("Generate Recommendations", type="primary"):
                                 genres=m["genres"],
                                 runtime=m["runtime"],
                                 vote_average=m["vote_average"],
-                                theme_class="theme-a"
+                                theme_class="theme-a",
+                                imdb_id=m.get("imdb_id")
                             )
 
         # =============================================================
@@ -486,7 +497,7 @@ if st.button("Generate Recommendations", type="primary"):
                 # Get top 3
                 top_heuristic = filtered_df.sort_values(by='heuristic_score', ascending=False).head(3)
                 
-                for _, row in top_heuristic.iterrows():
+                for _, row in top_heuristic.iterrows():  #لجدول الباندز بتلف علي كل صف ٍ
                     pref_score = predict_preference(row, nn_model, scaler) * 100
                     
                     reason = "Highly rated and extremely popular overall."
@@ -501,7 +512,8 @@ if st.button("Generate Recommendations", type="primary"):
                         genres=row["genres"],
                         runtime=row["runtime"],
                         vote_average=row["vote_average"],
-                        theme_class="theme-b"
+                        theme_class="theme-b",
+                        imdb_id=row.get("imdb_id")
                     )
             else:
                 st.info("No heuristic recommendations found matching your constraints.")
@@ -570,7 +582,8 @@ if st.button("Generate Recommendations", type="primary"):
                             genres=row["genres"],
                             runtime=row["runtime"],
                             vote_average=row["vote_average"],
-                            theme_class="theme-c"
+                            theme_class="theme-c",
+                            imdb_id=row.get("imdb_id")
                         )
                 else:
                     st.info("No KNN collaborative recommendations found matching your constraints.")
@@ -578,7 +591,8 @@ if st.button("Generate Recommendations", type="primary"):
         # -------------------------------------------------------------
         # SECTION C: Watch Plan Builder
         # Uses the SAME pools already collected above — no duplicate logic
-        # diversity slider has real effect on the schedule too
+        # BUG FIX: Watch plan now pulls from a bigger combined pool so
+        # diversity slider has real effect on the schedule too.
         # =============================================================
         st.markdown("---")
         st.header("📅 Your Personalized Watch Plan")
