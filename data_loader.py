@@ -22,7 +22,7 @@ def load_movies(path="data/movies_metadata.csv", min_votes=50, min_movies=100, m
     df["adult"] = df["adult"].astype(str).str.lower() == "true"
 
     df = df[["id","title","genres","runtime","vote_average",
-             "vote_count","year","popularity","overview","adult"]]
+             "vote_count","year","popularity","overview","adult","imdb_id"]]
     df = df.drop_duplicates(subset=["title"])
 
     # Strict filter first
