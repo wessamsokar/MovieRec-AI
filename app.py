@@ -23,8 +23,9 @@ def load_data():
 @st.cache_resource
 def train_nn_model(movies, ratings):
     """
-    Train a simple Multi-Layer Perceptron (Neural Network) 
-    to predict if a user will like a movie based on its features.
+    Train a Multi-Layer Perceptron as a global taste model on the Kaggle
+    ratings dataset (100k+ rating rows): it learns general appeal from pooled
+    user–movie ratings, not a separate model per Streamlit user.
     """
     # Guard against too-small or empty datasets to avoid runtime crashes.
     if movies is None or ratings is None or len(movies) < 10 or len(ratings) < 10:
@@ -65,8 +66,8 @@ def get_content_similarity_matrix(movies):
 @st.cache_data
 def get_knn_feature_data(movies):
     """
-    Build a feature matrix for item-item KNN collaborative-style recommendations.
-    Uses genres (TF-IDF) + numeric movie signals.
+    Build a feature matrix for item-item KNN from movie metadata.
+    Uses genres (TF-IDF) + numeric movie signals (not a user–item ratings matrix).
     """
     genre_tfidf = TfidfVectorizer(stop_words="english")
     genre_matrix = genre_tfidf.fit_transform(movies["genres"].fillna(""))
@@ -89,7 +90,7 @@ def build_knn_model(movies):
 
 def get_collaborative_recommendations(movie_title, df, n=10):
     """
-    KNN-based collaborative-style item recommendations from movie feature neighborhoods.
+    Item-based KNN over movie feature neighborhoods (metadata similarity).
     Returns ranked recommendations with similarity scores.
     """
     if movie_title is None or movie_title not in df["title"].values:
@@ -174,7 +175,7 @@ def render_movie_card(title, year, explanation, pref_score, genres, runtime, vot
         <div class="movie-card {theme_class}">
           <div class="movie-card-title">{safe_title} ({year_text})</div>
           <div class="movie-card-body"><b>Explanation:</b> {safe_explanation}</div>
-          <div class="movie-card-body"><b>🧠 Neural Net Predicts:</b> <b>{pref_score:.1f}%</b> chance you'll love it.</div>
+          <div class="movie-card-body"><b>🧠 Global taste model (MLP):</b> <b>{pref_score:.1f}%</b> estimated general appeal for this movie.</div>
           <div class="movie-card-meta">🎭 Genres: {safe_genres} | ⏱️ Runtime: {runtime_text} | ⭐ Avg Rating: {rating_text}</div>
           <div class="movie-card-meta" style="margin-top:8px;">🔗 {link_html}</div>
         </div>
@@ -278,7 +279,7 @@ st.markdown(
     """
     <div class="hero-box">
       <div class="hero-title">🎬 AI Movie Recommendation &amp; Viewing Planner</div>
-      <div class="hero-subtitle">Prototype using Scikit-Learn (TF-IDF, Cosine Similarity, &amp; MLPClassifier) and Streamlit.</div>
+      <div class="hero-subtitle">Prototype using Scikit-Learn (TF-IDF, Cosine Similarity, &amp; MLPClassifier) and Streamlit. The MLP is a <b>global taste model</b> trained on Kaggle MovieLens-scale ratings—not per-user personalization.</div>
     </div>
     """,
     unsafe_allow_html=True
@@ -328,6 +329,10 @@ if cold_start_mode:
     cold_start_year_max = {"Classic (before 2000)": 1999, "Modern (2000 and after)": 2000}.get(cs_era, None)
     family_friendly     = False
     st.sidebar.markdown(f"*Detected preferences:* **{', '.join(preferred_genres)}**")
+    st.sidebar.info(
+        "**Methods A & C** need **liked movies** as seeds and do not run in Cold-Start mode. "
+        "That is intentional: **Method B** uses your answers for heuristic discovery first."
+    )
 
 else:
     cold_start_year_max = None
@@ -396,7 +401,13 @@ if st.button("Generate Recommendations", type="primary"):
             )
 
             if not liked_movies_titles:
-                st.info("Select movies you like in the sidebar to see content-based recommendations.")
+                if cold_start_mode:
+                    st.info(
+                        "**Method A** needs **liked movies** to anchor TF–IDF similarity. "
+                        "In **Cold-Start mode** it is intentionally bypassed—rely on **Method B** for discovery from your questionnaire."
+                    )
+                else:
+                    st.info("Select movies you like in the sidebar to see content-based recommendations.")
             else:
                 liked_indices = movies_df[movies_df['title'].isin(liked_movies_titles)].index.tolist()
 
@@ -460,7 +471,8 @@ if st.button("Generate Recommendations", type="primary"):
         with col2:
             render_method_header(
                 "⭐ Method B: Top Rated & Popular",
-                "Recommends highly-rated blockbusters tailored to your constraints."
+                "Uses a Normalized Weighted Score (0.7×Rating + 0.3×Popularity) after scaling each signal by the filtered set maximum, "
+                "then ranks blockbusters that match your constraints."
             )
 
             # Start with all movies
@@ -519,16 +531,22 @@ if st.button("Generate Recommendations", type="primary"):
                 st.info("No heuristic recommendations found matching your constraints.")
 
         # -------------------------------------------------------------
-        # METHOD C: Collaborative Filtering (KNN)
+        # METHOD C: Item-Based KNN (metadata similarity)
         # -------------------------------------------------------------
         with col3:
             render_method_header(
-                "🤝 Method C: Collaborative Filtering (KNN)",
-                "Finds nearest movies in a learned feature neighborhood using KNN."
+                "🤝 Method C: Item-Based KNN (Metadata Similarity)",
+                "Finds nearest movies in a feature space (genre TF–IDF plus metadata), not a user–item ratings matrix."
             )
 
             if not liked_movies_titles:
-                st.info("Select at least one liked movie to run collaborative filtering.")
+                if cold_start_mode:
+                    st.info(
+                        "**Method C** needs **liked movies** as seeds for neighborhood search. "
+                        "In **Cold-Start mode** it is intentionally bypassed—**Method B** drives discovery."
+                    )
+                else:
+                    st.info("Select at least one liked movie to run item-based KNN.")
             else:
                 # Aggregate neighbors from all selected seed movies to reduce empty-result cases.
                 aggregated = {}
@@ -586,7 +604,7 @@ if st.button("Generate Recommendations", type="primary"):
                             imdb_id=row.get("imdb_id")
                         )
                 else:
-                    st.info("No KNN collaborative recommendations found matching your constraints.")
+                    st.info("No item-based KNN recommendations found matching your constraints.")
 
         # -------------------------------------------------------------
         # SECTION C: Watch Plan Builder
@@ -595,9 +613,9 @@ if st.button("Generate Recommendations", type="primary"):
         # diversity slider has real effect on the schedule too.
         # =============================================================
         st.markdown("---")
-        st.header("📅 Your Personalized Watch Plan")
+        st.header("📅 Your Watch Plan")
         st.caption("A short viewing schedule built from the top recommendations above. "
-                   "Movies are ordered by Neural Net preference score and spread across your chosen days.")
+                   "Movies are ordered by the global taste model (MLP) score, then diversity rules, and spread across your chosen days.")
 
         # Rebuild combined pool for watch plan
         # FIX: كل source بياخد 5 بس عشان الـ Mood يأثر دايما حتى لو في أفلام محددة
@@ -668,7 +686,7 @@ if st.button("Generate Recommendations", type="primary"):
         if not watch_pool:
             st.info("No movies available to build a watch plan. Adjust your constraints and try again.")
         else:
-            # Sort by neural net score first, then apply diversity on the sorted pool
+            # Sort by global taste (MLP) score first, then apply diversity on the sorted pool
             watch_pool.sort(key=lambda x: x['pref_score'], reverse=True)
             watch_candidates = apply_diversity(watch_pool, diversity_level, top_n=10)
 
@@ -698,7 +716,7 @@ if st.button("Generate Recommendations", type="primary"):
                     with dcol2:
                         st.markdown(f"#### 🎬 {movie['title']} ({year_str})")
                         st.caption(f"🎭 {movie['genres']}  |  ⏱️ {runtime} min  |  ⭐ {movie['vote_average']}")
-                        st.markdown(f"**🧠 Predicted Enjoyment:** {pref_pct:.1f}%")
+                        st.markdown(f"**🧠 Global taste score (MLP):** {pref_pct:.1f}%")
                         st.progress(movie['pref_score'])
                         if movie['source'] == 'Content-Based':
                             reason = "Selected because it closely matches the style and themes of your liked movies."
@@ -714,20 +732,30 @@ if st.button("Generate Recommendations", type="primary"):
         eval_col, comp_col = st.columns(2)
 
         with eval_col:
-            st.subheader("1. Neural Network Evaluation")
-            st.info(f"**Model:** Multi-Layer Perceptron (MLP)\n\n**Accuracy:** The model achieved **{nn_accuracy * 100:.1f}%** accuracy on unseen test data in predicting user preferences.")
-            st.caption("This satisfies the requirement for a starter deep-learning component with evaluation.")
+            st.subheader("1. Global Taste Model (MLP) Evaluation")
+            st.info(
+                f"**Model:** Multi-Layer Perceptron (MLP) — **global taste model** trained on the Kaggle "
+                f"`ratings_small.csv` pool (100k+ ratings), not a per-user model.\n\n"
+                f"**Accuracy:** **{nn_accuracy * 100:.1f}%** on held-out data for predicting like vs. dislike from movie features."
+            )
+            st.caption("Evaluates a starter deep-learning component; scores reflect general appeal, not individual user fit.")
 
         with comp_col:
             st.subheader("2. Method Comparison")
             st.markdown("""
             **Method A (Content-Based + Cosine Sim):**
-            * **Pros:** Highly personalized; finds movies similar to your favorites.
-            * **Cons:** Fails for new users with no watched history (Cold-Start).
+            * **Pros:** Finds movies textually similar to your liked titles.
+            * **Cons:** Requires liked-movie seeds; skipped in Cold-Start mode by design.
 
             **Method B (Heuristic / Rules-Based):**
-            * **Pros:** Great for new users; guarantees highly-rated blockbusters.
-            * **Cons:** Not personalized; heavily biased towards popular movies.
+            * **Pros:** Works without likes; uses Normalized Weighted Score (0.7×Rating + 0.3×Popularity on max-normalized fields).
+            * **Cons:** Catalog-level ranking; can favor popular titles.
+
+            **Method C (Item-Based KNN, metadata):**
+            * **Pros:** Discovers neighbors in feature space from seeds you pick.
+            * **Cons:** Not matrix-factorization CF; requires liked movies and is skipped in Cold-Start mode.
+
+            **Global taste MLP:** Same appeal score for every user for a given movie—trained on pooled Kaggle ratings.
             """)
             st.caption("This satisfies the requirement to compare at least two AI approaches.")
 
@@ -738,4 +766,4 @@ if st.button("Generate Recommendations", type="primary"):
             sum_col1.metric("🎬 Movies in Plan", len(plan_movies))
             sum_col2.metric("⏱️ Total Watch Time", f"{total_runtime} min  (~{total_runtime // 60}h {total_runtime % 60}m)")
             avg_enjoy = np.mean([m['pref_score'] for m in plan_movies]) * 100
-            sum_col3.metric("🧠 Avg Predicted Enjoyment", f"{avg_enjoy:.1f}%")
+            sum_col3.metric("🧠 Avg Global Taste Score", f"{avg_enjoy:.1f}%")

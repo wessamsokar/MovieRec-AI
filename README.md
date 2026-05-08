@@ -5,35 +5,40 @@
 
 ## Project Overview
 
-This project is a fully-functional Movie Recommendation and Viewing Planner prototype that leverages Artificial Intelligence and Machine Learning to help users discover films based on their specific tastes. It implements search and prediction techniques to accurately rank and explain personalized movie recommendations.
+This project is a Movie Recommendation and Viewing Planner prototype that leverages Artificial Intelligence and Machine Learning for discovery and ranking. Content-based and KNN tracks use explicit user seeds where applicable; the MLP provides a **catalog-level** appeal signal trained on pooled ratings—not user-specific personalization.
 
 ## Core AI Concepts Used
 
 1. **Content-Based Recommendation (TF-IDF & Cosine Similarity):**
    - Builds a text vector representation from movie genres and overviews.
-   - Computes cosine similarity to recommend movies contextually similar to the user's selected favorites.
-2. **Heuristic/Rule-Based Recommendation:**
-   - Ranks movies using a robust weighted heuristic (70% Average Rating, 30% Popularity).
-   - Dynamically filters based on strict user constraints (Runtime, Adult Content, Genres).
-3. **Neural Network Component (MLPClassifier):**
-   - Trains a Multi-Layer Perceptron (MLP) on the user's rating history.
-   - Predicts a personalized "Preference Score" indicating the likelihood a user will enjoy a recommended movie based on features like runtime, vote average, release year, and popularity.
+   - Computes cosine similarity to movies **seeded by liked titles** chosen in the UI (Method A requires these anchors).
+
+2. **Heuristic / Rule-Based Recommendation:**
+   - Ranks candidates with a **Normalized Weighted Score: 0.7×Rating + 0.3×Popularity**, where Rating and Popularity are each divided by the **maximum value in the current filtered subset** before weighting (not raw linear units).
+   - Applies strict user constraints (runtime, adult content, genres, and optional era in Cold-Start mode).
+
+3. **Item-Based Nearest Neighbors (Metadata KNN — Method C):**
+   - Trains `NearestNeighbors` on **movie feature vectors** (genre TF-IDF plus scaled metadata such as rating, popularity, runtime, year)—**not** a user–item ratings matrix, so this is metadata similarity rather than classical collaborative filtering.
+
+4. **Neural Network — Global Taste Model (MLPClassifier):**
+   - Trains a single **global** Multi-Layer Perceptron on the Kaggle-derived **`ratings_small.csv`** subset (**100k+ rating rows**) merged with movie features.
+   - Predicts **general movie appeal** (like vs. dislike from pooled users) from features such as runtime, vote average, release year, and popularity—the **same** score for every app user for a given movie, not a separately trained **per-user** model.
 
 ## 🌟 Bonus Features (Stretch Goals)
 
 This prototype includes several advanced features that go beyond the core requirements to enhance the user experience:
 
-- **🧊 Cold-Start User Mode:** A solution for new users without a viewing history. It asks three simple questions (preferred story vibe, available time, and era) to automatically infer genres and filter criteria, avoiding the traditional "blank slate" problem.
+- **🧊 Cold-Start User Mode:** Asks three questions (story vibe, time available, era) to infer genres and filters. **Method A (content-based)** and **Method C (item KNN)** are **intentionally skipped** without liked movies; **Method B (heuristic)** drives discovery in this mode by design.
 - **🎭 Mood-Based Recommendations:** Instead of manually picking genres, users can select their current emotional state (e.g., Happy, Adventurous, Thoughtful). The system dynamically maps this mood to the optimal set of movie genres.
 - **🎨 Genre Diversity Control:** A dynamic slider (0% to 100%) that enforces content variety. When set higher, the filtering algorithm actively limits how many recommendations can share the same primary genre, ensuring a well-rounded list.
-- **📅 Personalized Watch Plan:** The system goes beyond listing movies by automatically constructing a cohesive day-by-day viewing schedule, sorted intelligently by the Neural Network's predicted enjoyment score.
+- **📅 Watch Plan:** Builds a short day-by-day schedule from combined recommendation pools, ordered by the **global taste MLP** score (then genre-diversity rules), not per-user neural personalization.
 
 ## File Structure
 
-- `app.py`: The main Streamlit web application, containing UI elements, recommendation logic (Content-Based and Heuristic), and Neural Network inference.
+- `app.py`: The main Streamlit web application (content-based, heuristic, item-based KNN, and **global** MLP inference).
 - `data_loader.py`: Handles data ingestion, cleaning, and strict subsetting to maintain the required dataset size constraint of 100-500 movies for optimal performance.
 - `movies_metadata.csv`: Contains the dataset of movie metadata used for features, TF-IDF vectorization, and UI display.
-- `ratings_small.csv`: Contains user interactions and ratings used to train the Neural Network.
+- `ratings_small.csv`: Kaggle MovieLens-style ratings (100k+ rows) used to train the **global taste** MLP on pooled user–movie interactions.
 - `requirements.txt`: Specifies the exact Python library dependencies to ensure seamless cross-platform execution.
 - `.gitignore`: Standard exclusion list for repository hygiene.
 
@@ -64,7 +69,7 @@ Once the local server starts, the app will automatically open in your default we
 1. **Set Preferences:** In the left sidebar, select up to 3 movies you like and optionally choose preferred genres.
 2. **Set Constraints:** Adjust the Max Runtime slider and toggle the Family Friendly checkbox based on your viewing availability.
 3. **Generate:** Click the **Generate Recommendations** button.
-4. **Evaluate:** The application will display Method A (Content-Based) and Method B (Heuristic) recommendations side-by-side, complete with textual explanations and Neural Network preference predictions, followed by an explicit Method Comparison summary.
+4. **Evaluate:** The application shows Method A (content-based), Method B (normalized heuristic score), and Method C (item-based KNN) where seeds exist, plus **global MLP** appeal scores and a method comparison summary.
 
 ## Dataset
 
