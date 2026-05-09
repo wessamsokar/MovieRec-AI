@@ -414,14 +414,14 @@ if st.button("Generate Recommendations", type="primary"):
                 if not liked_indices:
                     st.info("Could not process selected movies.")
                 else:
-                    sim_scores = cosine_sim[liked_indices].mean(axis=0)    #المين للصف 
-                    movie_indices = np.argsort(sim_scores)[::-1]  #عكس الترتيب
+                    sim_scores = cosine_sim[liked_indices].mean(axis=0)    # Mean similarity across liked rows
+                    movie_indices = np.argsort(sim_scores)[::-1]  # Reverse order
                     rec_indices = [i for i in movie_indices if i not in liked_indices]
 
                     # BUG FIX 2: Collect a larger pool (up to 15) → apply diversity → show top 3
                     pool_a = []
                     for i in rec_indices:
-                        row = movies_df.iloc[i]          #بجيب بيانات الصف للفيلم 
+                        row = movies_df.iloc[i]          # Fetch row data for the movie
                         if pd.isna(row['runtime']) or row['runtime'] > max_runtime:
                             continue
                         if pd.isna(row['vote_average']) or row['vote_average'] < min_rating:
@@ -509,7 +509,7 @@ if st.button("Generate Recommendations", type="primary"):
                 # Get top 3
                 top_heuristic = filtered_df.sort_values(by='heuristic_score', ascending=False).head(3)
                 
-                for _, row in top_heuristic.iterrows():  #لجدول الباندز بتلف علي كل صف ٍ
+                for _, row in top_heuristic.iterrows():  # Iterate over each row
                     pref_score = predict_preference(row, nn_model, scaler) * 100
                     
                     reason = "Highly rated and extremely popular overall."
@@ -618,11 +618,11 @@ if st.button("Generate Recommendations", type="primary"):
                    "Movies are ordered by the global taste model (MLP) score, then diversity rules, and spread across your chosen days.")
 
         # Rebuild combined pool for watch plan
-        # FIX: كل source بياخد 5 بس عشان الـ Mood يأثر دايما حتى لو في أفلام محددة
+        # FIX: Each source takes only 5 so Mood always influences even with specific movies
         content_pool_wp = []
         heuristic_pool_wp = []
 
-        # Content-based pool (max 20 عشان الـ diversity يلاقي بدائل كتير)
+        # Content-based pool (max 20 so diversity finds more alternatives)
         if liked_movies_titles:
             liked_indices_wp = movies_df[movies_df['title'].isin(liked_movies_titles)].index.tolist()
             if liked_indices_wp:
@@ -650,7 +650,7 @@ if st.button("Generate Recommendations", type="primary"):
                     if len(content_pool_wp) >= 20:
                         break
 
-        # Heuristic pool (max 20) - بيجيب أفلام الـ Mood/genre الأعلى rating
+        # Heuristic pool (max 20) - picks highest-rated Mood/genre movies
         filt_wp = build_filtered_df(
             movies_df, max_runtime, family_friendly,
             preferred_genres, cold_start_year_max, liked_movies_titles)
@@ -676,7 +676,7 @@ if st.button("Generate Recommendations", type="primary"):
                 if len(heuristic_pool_wp) >= 20:
                     break
 
-        # دمج الاتنين — content أولاً ثم heuristic بدون تكرار
+        # Merge the two — content first then heuristic without duplicates
         watch_pool = content_pool_wp + [
             m for m in heuristic_pool_wp
             if not any(c['title'] == m['title'] for c in content_pool_wp)
