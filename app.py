@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import html
+import urllib.parse
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.neural_network import MLPClassifier
@@ -166,7 +167,7 @@ def render_movie_card(title, year, explanation, pref_score, genres, runtime, vot
     if imdb_id and str(imdb_id).startswith("tt"):
         link_html = f'<a href="https://www.imdb.com/title/{imdb_id}/" target="_blank" style="color:#fbbf24; text-decoration:none; font-weight:600;">🎥 View on IMDb</a>'
     else:
-        import urllib.parse
+        
         query = urllib.parse.quote_plus(str(title))
         link_html = f'<a href="https://www.imdb.com/find/?q={query}&s=tt&ttype=ft" target="_blank" style="color:#fbbf24; text-decoration:none; font-weight:600;">🎥 Search on IMDb</a>'
 
