@@ -25,7 +25,7 @@ def load_movies(path="data/movies_metadata.csv", min_votes=50, min_movies=100, m
              "vote_count","year","popularity","overview","adult","imdb_id"]]
     df = df.drop_duplicates(subset=["title"])
 
-    # Strict filter first
+
     filtered = df[
         (df["vote_count"] >= min_votes)
         & (df["vote_average"] > 0)
@@ -37,7 +37,7 @@ def load_movies(path="data/movies_metadata.csv", min_votes=50, min_movies=100, m
         & df["id"].notna()
     ].copy()
 
-    # If strict filtering yields too few movies, relax vote_count to reach min_movies
+    # If strict filtering yields too few movies
     if len(filtered) < min_movies:
         relaxed = df[
             (df["vote_average"] > 0)
