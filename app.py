@@ -154,7 +154,7 @@ def apply_diversity(candidates, diversity_pct, top_n=3):
 
 
 def render_movie_card(title, year, explanation, pref_score, genres, runtime, vote_average, theme_class="theme-a", imdb_id=None):
-    """Render recommendation cards with one unified shape/style."""
+   
     year_text = str(int(year)) if pd.notnull(year) else "N/A"
     runtime_text = f"{int(runtime)} min" if pd.notnull(runtime) else "N/A"
     safe_title = html.escape(str(title))
